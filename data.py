@@ -1,55 +1,80 @@
-import os
 import pickle
-import pandas as pd
-import datetime
+import numpy as np
+from geopy import distance
 
-from multiprocessing import Pool
+class DataEnrich:
 
-def get_labeled_data_as_df(path):
-    trajectory_frames = []
+    def __init__(self):
+        pass
 
-    labelfile = os.path.join(path, "labels.txt")
-    _label_df = pd.read_csv(labelfile,sep="\t",header=0,names=["starttime", "endtime", "mode"],parse_dates=[0,1])
-    _label_df["startdate"] = _label_df["starttime"].dt.date
-    _label_startdate_set = set(_label_df["startdate"])
+    def _load_raw_pickle(self):
+        return pickle.load(open("data/raw_labeled.pkl","rb"))
 
-    datapath = os.path.join(path, "Trajectory")
-    for file in os.listdir(datapath):
-        df = pd.read_csv(os.path.join(datapath,file),
-                         sep=",",
-                         header=None,
-                         skiprows=6,
-                         usecols=[0, 1, 3, 5, 6],
-                         names=["lat", "lon", "altitude", "date", "time"])
+    def consolidate_trajectories(self):
+        raw_dfs = self._load_raw_pickle()
+        trajectories = []
+        for traj_of_person in raw_dfs:
+            dfs_with_label = []
+            for traj in traj_of_person:
+                if "label" in traj.columns:
+                    traj = traj.replace(to_replace='None', value=np.nan).dropna()
+                    traj.reset_index(inplace=True)
+                    dfs_with_label.append(traj)
+            if dfs_with_label:
+                trajectories.extend(dfs_with_label)
+        return trajectories
 
-        df["datetime"] = pd.to_datetime(df['date'] + ' ' + df['time'])
-        date_of_traj = datetime.datetime.strptime(file[:8],"%Y%m%d").date()
+    def _calc_speed(self, distance, ts_a, ts_b):
+        time_delta = ts_b - ts_a
+        if time_delta.total_seconds() == 0:
+            return 0
+        return distance / time_delta.total_seconds()  # m/s
 
-        if date_of_traj in _label_startdate_set:
-            labels_for_date = _label_df[_label_df["startdate"] == date_of_traj]
+    def _calc_accel(self, speed_a, speed_b, ts_a, ts_b):
+        time_delta = ts_b - ts_a
+        speed_delta = speed_b - speed_a
+        if time_delta.total_seconds() == 0:
+            return 0
+        return speed_delta / time_delta.total_seconds()  # m/s^2
 
-            def is_in(trajrow):
-                for i, row in labels_for_date.iterrows():
-                    if row["starttime"] <= trajrow["datetime"] <= row["endtime"]:
-                        return row["mode"]
-
-            df["label"] = df.apply(is_in, axis=1)
-
-        trajectory_frames.append(df)
-        print("added", datapath, file)
-    return trajectory_frames
-
-if __name__ == '__main__':
-    path = "H:\geolife\Data"
-    traj_with_labels_paths = []
-    for file in os.listdir(path):
-        currfile = os.path.join(path, file)
-        if os.path.isdir(currfile):
-            if "labels.txt" not in os.listdir(currfile):
+    def calc_dist_for_frame(self, trajectory_frame):
+        trajectory_frame["dist"] = 0
+        for i, elem in trajectory_frame.iterrows():
+            if i == 0:
                 continue
-            traj_with_labels_paths.append(currfile)
+            point_a = (trajectory_frame["lat"][i-1], trajectory_frame["lon"][i-1])
+            point_b = (trajectory_frame["lat"][i], trajectory_frame["lon"][i])
+            if point_a[0] == point_b[0] and point_a[1] == point_b[1]:
+                trajectory_frame["dist"][i] = 0
+            else:
+                trajectory_frame["dist"][i] = distance.distance((point_a[0], point_a[1]), (point_b[0], point_b[1])).m
 
-    with Pool(3) as p:
-        traj_frames = p.map(get_labeled_data_as_df, traj_with_labels_paths)
+    def calc_speed_for_frame(self, trajectory_frame):
+            trajectory_frame["speed"] = 0
+            for i, elem in trajectory_frame.iterrows():
+                if i == 0:
+                    continue
+                trajectory_frame["speed"][i] = self._calc_speed(trajectory_frame["dist"][i],
+                                                                trajectory_frame["datetime"][i-1],
+                                                                trajectory_frame["datetime"][i]
+                                                                )
 
-    pickle.dump(traj_frames, open( "data/raw_labeled.pkl", "wb"))
+    def calc_accel_for_frame(self, trajectory_frame):
+        trajectory_frame["accel"] = 0
+        for i, elem in trajectory_frame.iterrows():
+            if i == 0:
+                continue
+            trajectory_frame["accel"][i] = self._calc_accel(trajectory_frame["speed"][i-1],
+                                                            trajectory_frame["speed"][i],
+                                                            trajectory_frame["datetime"][i - 1],
+                                                            trajectory_frame["datetime"][i]
+                                                            )
+    def get_enriched_data(self):
+        traj = self.consolidate_trajectories()
+        for elem in traj:
+            self.calc_dist_for_frame(elem)
+            self.calc_speed_for_frame(elem)
+            self.calc_accel_for_frame(elem)
+        return traj
+
+
