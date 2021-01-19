@@ -42,8 +42,17 @@ class DataEnrich:
         for i, elem in trajectory_frame.iterrows():
             if i == 0:
                 continue
-            point_a = (trajectory_frame["lat"][i-1], trajectory_frame["lon"][i-1])
-            point_b = (trajectory_frame["lat"][i], trajectory_frame["lon"][i])
+            lat_1 = trajectory_frame["lat"][i-1]
+            lat_2 = trajectory_frame["lat"][i]
+            if lat_1 > 90:
+                print("Faulty", lat_1)
+                lat_1 /= 10
+            if lat_2 > 90:
+                print("Faulty", lat_2)
+                lat_2 /= 10
+
+            point_a = (lat_1, trajectory_frame["lon"][i-1])
+            point_b = (lat_2, trajectory_frame["lon"][i])
             if point_a[0] == point_b[0] and point_a[1] == point_b[1]:
                 trajectory_frame["dist"][i] = 0
             else:
@@ -69,12 +78,17 @@ class DataEnrich:
                                                             trajectory_frame["datetime"][i - 1],
                                                             trajectory_frame["datetime"][i]
                                                             )
-    def get_enriched_data(self):
+    def get_enriched_data(self, from_pickle):
+        if from_pickle:
+            return pickle.load(open("data/raw_enriched.pkl", "rb"))
+
         traj = self.consolidate_trajectories()
         for elem in traj:
             self.calc_dist_for_frame(elem)
             self.calc_speed_for_frame(elem)
             self.calc_accel_for_frame(elem)
+        print("dumping")
+        pickle.dump(traj, open("data/raw_enriched.pkl", "wb"))
         return traj
 
 
