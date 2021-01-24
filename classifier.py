@@ -9,16 +9,16 @@ from modality_lstm import ModalityLSTM
 batch_size = 32
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 train_on_gpu = True
-output_size = 6
-hidden_dim = 64
-trip_dim = 3
+output_size = 5
+hidden_dim = 128
+trip_dim = 6
 n_layers = 2
 drop_prob = 0.2
 net = ModalityLSTM(trip_dim, output_size, batch_size, hidden_dim, n_layers, train_on_gpu, drop_prob, lstm_drop_prob=0.2)
-lr=0.005
+lr=0.001
 loss_function = nn.CrossEntropyLoss(ignore_index=-1)
 optimizer = torch.optim.Adam(net.parameters(), lr=lr)
-epochs = 3
+epochs = 6
 print_every = 5
 log_every = 1
 evaluate_every = 100

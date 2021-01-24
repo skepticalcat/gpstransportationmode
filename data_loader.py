@@ -20,8 +20,8 @@ class DataLoader():
         'taxi': 10
     }
 
-    fields_to_feed = [ "dist", "speed", "accel"]
-    labels_to_remove = ["boat", "motorcycle", "airplane", "run"]
+    fields_to_feed = ["dist", "speed", "accel", "timedelta", "jerk", "bearing"]
+    labels_to_remove = ["boat", "motorcycle", "airplane", "run", "bike"]
 
 
     def __init__(self, test_ratio=0.2, val_ratio=0.1, batchsize=4):

@@ -1,4 +1,6 @@
 import pickle
+from math import cos, sin, atan2
+
 import numpy as np
 from geopy import distance
 
@@ -36,6 +38,21 @@ class DataEnrich:
         if time_delta.total_seconds() == 0:
             return 0
         return speed_delta / time_delta.total_seconds()  # m/s^2
+
+    def _calc_jerk(self, acc_a, acc_b, ts_a, ts_b):
+        time_delta = ts_b - ts_a
+        acc_delta = acc_b - acc_a
+        if time_delta.total_seconds() == 0:
+            return 0
+        return acc_delta / time_delta.total_seconds()
+
+    def _calc_bearing_rate(self, bearing_a, bearing_b, ts_a, ts_b):
+        time_delta = ts_b - ts_a
+        bear_delta = bearing_b - bearing_a
+        if time_delta.total_seconds() == 0:
+            return 0
+        return bear_delta / time_delta.total_seconds()
+
 
     def calc_dist_for_frame(self, trajectory_frame):
         trajectory_frame["dist"] = 0
@@ -104,6 +121,41 @@ class DataEnrich:
                 continue
             trajectory_frame["timedelta"][i] = (trajectory_frame["datetime"][i]-trajectory_frame["datetime"][i-1]).total_seconds()
 
+    def calc_jerk_for_frame(self, trajectory_frame):
+        trajectory_frame["jerk"] = 0
+        for i, elem in trajectory_frame.iterrows():
+            if i == 0:
+                continue
+            trajectory_frame["jerk"][i] = self._calc_jerk(trajectory_frame["accel"][i - 1],
+                                                            trajectory_frame["accel"][i],
+                                                            trajectory_frame["datetime"][i - 1],
+                                                            trajectory_frame["datetime"][i]
+                                                            )
+
+    def calc_bearing_for_frame(self, trajectory_frame):
+        trajectory_frame["bearing"] = 0
+        for i, elem in trajectory_frame.iterrows():
+            if i == 0:
+                continue
+            a_lat = trajectory_frame["lat"][i - 1]
+            a_lon = trajectory_frame["lon"][i - 1]
+            b_lat = trajectory_frame["lat"][i]
+            b_lon = trajectory_frame["lon"][i]
+            x = cos(b_lat) * sin(b_lon-a_lon)
+            y = cos(a_lat) * sin(b_lat) - sin(a_lat) * cos(b_lat) * cos(b_lon-a_lon)
+            trajectory_frame["bearing"][i] = atan2(x, y)
+
+    def calc_bearing_rate_for_frame(self, trajectory_frame):
+        trajectory_frame["bearing_rate"] = 0
+        for i, elem in trajectory_frame.iterrows():
+            if i == 0:
+                continue
+            trajectory_frame["bearing_rate"][i] = self._calc_bearing_rate(trajectory_frame["bearing"][i - 1],
+                                                            trajectory_frame["bearing"][i],
+                                                            trajectory_frame["datetime"][i - 1],
+                                                            trajectory_frame["datetime"][i]
+                                                            )
+
     def get_enriched_data(self, from_pickle):
         if from_pickle:
             return pickle.load(open("data/raw_enriched.pkl", "rb"))
@@ -115,6 +167,8 @@ class DataEnrich:
             self.calc_dist_for_frame(elem)
             self.calc_speed_for_frame(elem)
             self.calc_accel_for_frame(elem)
+            self.calc_jerk_for_frame(elem)
+            self.calc_bearing_for_frame(elem)
         print("dumping")
         pickle.dump(traj, open("data/raw_enriched.pkl", "wb"))
         return traj
