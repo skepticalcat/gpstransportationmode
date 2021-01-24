@@ -78,12 +78,40 @@ class DataEnrich:
                                                             trajectory_frame["datetime"][i - 1],
                                                             trajectory_frame["datetime"][i]
                                                             )
+
+    def set_sample_rate(self, trajectory_frame, min_sec_distance_between_points):
+        i = 1
+        indices_to_del = []
+        deleted = 1
+        while i < len(trajectory_frame)-deleted:
+            ts1 = trajectory_frame["datetime"][i]
+            ts2 = trajectory_frame["datetime"][i+deleted]
+            delta = ts2-ts1
+            if delta.seconds < min_sec_distance_between_points:
+                deleted+=1
+                indices_to_del.append(i)
+                continue
+            i+=deleted
+            deleted = 1
+        if indices_to_del:
+            trajectory_frame.drop(trajectory_frame.index[indices_to_del],inplace=True)
+            trajectory_frame.reset_index(inplace=True)
+
+    def set_time_between_points(self, trajectory_frame):
+        trajectory_frame["timedelta"] = 0
+        for i, elem in trajectory_frame.iterrows():
+            if i == 0:
+                continue
+            trajectory_frame["timedelta"][i] = (trajectory_frame["datetime"][i]-trajectory_frame["datetime"][i-1]).total_seconds()
+
     def get_enriched_data(self, from_pickle):
         if from_pickle:
             return pickle.load(open("data/raw_enriched.pkl", "rb"))
 
         traj = self.consolidate_trajectories()
         for elem in traj:
+            self.set_sample_rate(elem, 5)
+            self.set_time_between_points(elem)
             self.calc_dist_for_frame(elem)
             self.calc_speed_for_frame(elem)
             self.calc_accel_for_frame(elem)

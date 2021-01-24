@@ -11,20 +11,20 @@ class DataLoader():
         'walk': 1,
         'bus': 2,
         'train': 3,
-        'boat': 4,
-        'subway': 5,
-        'motorcycle': 6,
-        'run': 7,
+        'subway': 4,
+        'bike': 5,
+        'run': 6,
+        'boat': 7,
         'airplane': 8,
-        'bike': 9,
+        'motorcycle': 9,
         'taxi': 10
     }
 
-    fields_to_feed = ["altitude", "dist", "speed", "accel"]
-    labels_to_remove = ["boat", "motorcycle", "airplane"]
+    fields_to_feed = [ "dist", "speed", "accel"]
+    labels_to_remove = ["boat", "motorcycle", "airplane", "run"]
 
 
-    def __init__(self, test_ratio=0.2, val_ratio=0.1, batchsize=8):
+    def __init__(self, test_ratio=0.2, val_ratio=0.1, batchsize=4):
         de = DataEnrich()
         self._raw = de.get_enriched_data(True)
         self._test_ratio = test_ratio
@@ -33,9 +33,11 @@ class DataLoader():
         self.prepared_data = []
         self.prepared_labels = []
 
-    def _remove_traj_containing_labels(self, labels):
+    def _remove_traj_containing_labels(self):
         cleaned = []
         for elem in self._raw:
+            if len(elem) == 0:
+                continue
             if all(x not in list(elem["label"]) for x in self.labels_to_remove):
                 cleaned.append(elem)
         self._raw = cleaned
@@ -76,19 +78,36 @@ class DataLoader():
         self.val_labels = list(itemgetter(*i_val)(labels))
         self.train_labels = list(itemgetter(*i_train)(labels))
 
+    def _split_too_long_traj(self, traj, labels, max_points):
+        if len(traj) > max_points*2:
+            splitted_traj, splitted_labels = [],[]
+            num_subsets = len(traj) // max_points
+            print("splitting ", len(traj), "in ", num_subsets, "sets")
+            for i in range(num_subsets):
+                end_pointer = len(traj)-1 if ((i+1)*max_points)+max_points > len(traj) else (i*max_points)+max_points
+                traj_subset = traj[i*max_points:end_pointer]
+                labels_subset = labels[i*max_points:end_pointer]
+                assert len(traj_subset) == len(labels_subset)
+                splitted_traj.append(traj_subset)
+                splitted_labels.append(labels_subset)
+            return splitted_traj, splitted_labels
+        return [traj], [labels]
+
     def prepare_data(self):
         trajs = []
         labels = []
 
-        self._remove_traj_containing_labels(self.labels_to_remove)
+        self._remove_traj_containing_labels()
         self._merge_labels("car", "taxi")
         self._labels_to_int_repr()
 
         for elem in self._raw:
+            assert len(elem) > 0
             data_ = elem[self.fields_to_feed].values.tolist()
             label_ = elem["label"].values.tolist()
-            trajs.append(data_)
-            labels.append(label_)
+            data_, label_ = self._split_too_long_traj(data_, label_, 350)
+            trajs.extend(data_)
+            labels.extend(label_)
         self.prepared_data = trajs
         self.prepared_labels = labels # todo needed?
 
@@ -105,3 +124,34 @@ class DataLoader():
             for p in range(len(labels_sorted)):
                     assert len(labels_sorted[p]) == len(train_sorted[p])
             yield train_sorted, labels_sorted
+
+    def val_batches(self):
+        for i in range(0, len(self.val_data), self._batchsize):
+
+            if len(self.val_data[i:i + self._batchsize]) < self._batchsize:
+                break  # drop last incomplete batch
+
+            labels_sorted = sorted(self.val_labels[i:i + self._batchsize:], key=len, reverse=True)
+            val_sorted = sorted(self.val_data[i:i + self._batchsize:], key=len, reverse=True)
+            for p in range(len(labels_sorted)):
+                    assert len(labels_sorted[p]) == len(val_sorted[p])
+            yield val_sorted, labels_sorted
+
+    def test_batches(self):
+        for i in range(0, len(self.test_data), self._batchsize):
+
+            if len(self.test_data[i:i + self._batchsize]) < self._batchsize:
+                break  # drop last incomplete batch
+
+            labels_sorted = sorted(self.test_labels[i:i + self._batchsize:], key=len, reverse=True)
+            test_sorted = sorted(self.test_data[i:i + self._batchsize:], key=len, reverse=True)
+            for p in range(len(labels_sorted)):
+                    assert len(labels_sorted[p]) == len(test_sorted[p])
+            yield test_sorted, labels_sorted
+
+
+    def get_val_size(self):
+        return len(self.val_data)
+
+    def get_test_size(self):
+        return len(self.test_data)
