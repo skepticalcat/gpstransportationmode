@@ -3,7 +3,7 @@ import numpy as np
 from torch import nn
 
 from data_loader import DataLoader
-from helper import Validation
+from helper import ValTest
 from modality_lstm import ModalityLSTM
 
 batch_size = 32
@@ -11,7 +11,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 train_on_gpu = True
 output_size = 5
 hidden_dim = 128
-trip_dim = 6
+trip_dim = 7
 n_layers = 2
 drop_prob = 0.2
 net = ModalityLSTM(trip_dim, output_size, batch_size, hidden_dim, n_layers, train_on_gpu, drop_prob, lstm_drop_prob=0.2)
@@ -29,7 +29,7 @@ if train_on_gpu:
     net.cuda()
 net.train()
 
-dl = DataLoader(batchsize=batch_size)
+dl = DataLoader(batchsize=batch_size, read_from_pickle=True)
 dl.prepare_data()
 
 def pad_trajs(trajs, lengths):
@@ -41,8 +41,8 @@ def pad_trajs(trajs, lengths):
 
 losses, avg_losses = [], []
 
-validator = Validation(dl.val_batches, net, trip_dim, batch_size, device, loss_function, output_size, dl.get_val_size())
-test = Validation(dl.test_batches, net, trip_dim, batch_size, device, loss_function, output_size, dl.get_test_size())
+validator = ValTest(dl.val_batches, net, trip_dim, batch_size, device, loss_function, output_size, dl.get_val_size())
+test = ValTest(dl.test_batches, net, trip_dim, batch_size, device, loss_function, output_size, dl.get_test_size())
 
 for e in range(1,epochs+1):
     print("epoch ",e)
@@ -61,7 +61,6 @@ for e in range(1,epochs+1):
         net.zero_grad()
         output, max_padding_for_this_batch = net(input_tensor, lengths)
 
-        #prepare labels, move to GPU
         for labelz in labels_sorted:
             while len(labelz) < max_padding_for_this_batch:
                 labelz.append(-1)
@@ -81,8 +80,10 @@ for e in range(1,epochs+1):
         if counter % print_every == 0:
             avg_losses.append(sum(losses[-50:]) / 50)
             print(
-                f'Epoch: {e:2d}. {counter:d} of {int(1000 / batch_size):d} {avg_losses[len(avg_losses) - 1]:f} Loss: {loss.item():.4f}')
+                f'Epoch: {e:2d}. {counter:d} of {int(dl.get_train_size() / batch_size):d} {avg_losses[len(avg_losses) - 1]:f} Loss: {loss.item():.4f}')
         if counter % evaluate_every == 0:
-            validator.validate()
-print("test")
-test.validate()
+            validator.run()
+
+print("Testing")
+
+test.run()

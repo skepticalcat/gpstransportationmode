@@ -4,7 +4,7 @@ from operator import itemgetter
 from data_enrich import DataEnrich
 
 
-class DataLoader():
+class DataLoader:
 
     label_mapping = {
         'car': 0,
@@ -20,18 +20,16 @@ class DataLoader():
         'taxi': 10
     }
 
-    fields_to_feed = ["dist", "speed", "accel", "timedelta", "jerk", "bearing"]
+    fields_to_feed = ["dist", "speed", "accel", "timedelta", "jerk", "bearing", "bearing_rate"]
     labels_to_remove = ["boat", "motorcycle", "airplane", "run", "bike"]
 
 
-    def __init__(self, test_ratio=0.2, val_ratio=0.1, batchsize=4):
+    def __init__(self, test_ratio=0.2, val_ratio=0.1, batchsize=4, read_from_pickle=True):
         de = DataEnrich()
-        self._raw = de.get_enriched_data(True)
+        self._raw = de.get_enriched_data(read_from_pickle)
         self._test_ratio = test_ratio
         self._val_ratio = val_ratio
         self._batchsize = batchsize
-        self.prepared_data = []
-        self.prepared_labels = []
 
     def _remove_traj_containing_labels(self):
         cleaned = []
@@ -82,7 +80,7 @@ class DataLoader():
         if len(traj) > max_points*2:
             splitted_traj, splitted_labels = [],[]
             num_subsets = len(traj) // max_points
-            print("splitting ", len(traj), "in ", num_subsets, "sets")
+            print("Splitting trajectory with length ", len(traj), "in ", num_subsets, "trajectories")
             for i in range(num_subsets):
                 end_pointer = len(traj)-1 if ((i+1)*max_points)+max_points > len(traj) else (i*max_points)+max_points
                 traj_subset = traj[i*max_points:end_pointer]
@@ -108,10 +106,8 @@ class DataLoader():
             data_, label_ = self._split_too_long_traj(data_, label_, 350)
             trajs.extend(data_)
             labels.extend(label_)
-        self.prepared_data = trajs
-        self.prepared_labels = labels # todo needed?
 
-        self._set_splitted_data(self.prepared_data, self.prepared_labels)
+        self._set_splitted_data(trajs, labels)
 
     def batches(self):
         for i in range(0, len(self.train_data), self._batchsize):
@@ -149,6 +145,8 @@ class DataLoader():
                     assert len(labels_sorted[p]) == len(test_sorted[p])
             yield test_sorted, labels_sorted
 
+    def get_train_size(self):
+        return len(self.train_data)
 
     def get_val_size(self):
         return len(self.val_data)

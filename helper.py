@@ -8,7 +8,7 @@ def score_to_modality(scores: torch.Tensor):
         modality.append(row.index(max(row)))
     return modality
 
-class Validation:
+class ValTest:
     accuracy = []
 
     def __init__(self, dl_generator, net, trip_dim, batch_size, device, loss_function, num_modes, datasize):
@@ -21,7 +21,7 @@ class Validation:
         self.num_modes = num_modes
         self.datasize = datasize
 
-    def validate(self):
+    def run(self):
 
         correct = 0
         total = 0

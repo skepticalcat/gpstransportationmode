@@ -2,6 +2,7 @@ import os
 import pickle
 import pandas as pd
 import datetime
+import sys
 
 from multiprocessing import Pool
 
@@ -40,7 +41,10 @@ def get_labeled_data_as_df(path):
     return trajectory_frames
 
 if __name__ == '__main__':
-    path = "H:\geolife\Data"
+    if len(sys.argv) < 2:
+        print("Usage: raw_data_loader.py /path/to/geolife/Data/")
+        exit(-1)
+    path = sys.argv[1]
     traj_with_labels_paths = []
     for file in os.listdir(path):
         currfile = os.path.join(path, file)
